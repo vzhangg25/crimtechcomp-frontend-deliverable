@@ -1,10 +1,11 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { useSearchParams } from 'react-router-dom';
 import { fetchArticles } from '../api/client';
 import type { ArticleListItem } from '../types';
 import './ReadPage.css';
 
 const STORAGE_KEY = 'articleReader_state';
+const THEME_KEY = 'articleReader_theme';
 
 interface SavedState {
   articles: ArticleListItem[];
@@ -14,18 +15,14 @@ interface SavedState {
   scrollPosition: number;
 }
 
-function debounce<T extends (...args: unknown[]) => void>(fn: T, delay: number): T {
-  let timeoutId: ReturnType<typeof setTimeout>;
-  return ((...args: unknown[]) => {
-    clearTimeout(timeoutId);
-    timeoutId = setTimeout(() => fn(...args), delay);
-  }) as T;
+function getInitialTheme(): 'light' | 'dark' {
+  const saved = localStorage.getItem(THEME_KEY);
+  if (saved === 'dark' || saved === 'light') return saved;
+  return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
 }
 
 export default function ReadPage() {
-  const { articleId } = useParams();
   const [searchParams, setSearchParams] = useSearchParams();
-  const navigate = useNavigate();
   
   const [articles, setArticles] = useState<ArticleListItem[]>([]);
   const [loading, setLoading] = useState(false);
@@ -35,11 +32,14 @@ export default function ReadPage() {
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState(searchParams.get('q') || '');
   const [activeArticleId, setActiveArticleId] = useState<string | null>(null);
+  const [isSearching, setIsSearching] = useState(false);
+  const [theme, setTheme] = useState<'light' | 'dark'>(getInitialTheme);
   
   const sentinelRef = useRef<HTMLDivElement>(null);
   const articleRefs = useRef<Map<string, HTMLElement>>(new Map());
   const isLoadingRef = useRef(false);
   const observerRef = useRef<IntersectionObserver | null>(null);
+  const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const saveState = useCallback(() => {
     const state: SavedState = {
@@ -63,7 +63,6 @@ export default function ReadPage() {
     }
     return null;
   };
-
   const loadArticles = useCallback(async (cursor: string | null = null, query: string = searchQuery, isNewSearch: boolean = false) => {
     if (isLoadingRef.current) return;
     
@@ -78,8 +77,6 @@ export default function ReadPage() {
         q: query || null,
       });
       
-      console.log(`[API Response] Received ${response.items.length} articles, hasMore: ${response.hasMore}, nextCursor: ${response.nextCursor}`);
-      
       if (isNewSearch) {
         setArticles(response.items);
       } else {
@@ -92,10 +89,11 @@ export default function ReadPage() {
     } finally {
       setLoading(false);
       setInitialLoading(false);
+      setIsSearching(false);
       isLoadingRef.current = false;
     }
   }, [searchQuery]);
-
+// called when user scrolls to the bottom of the page, only loads if not already loading
   const loadMore = useCallback(() => {
     if (!isLoadingRef.current && hasMore && nextCursor) {
       loadArticles(nextCursor);
@@ -194,9 +192,12 @@ export default function ReadPage() {
     };
   }, [articles, activeArticleId, searchQuery]);
 
-  const debouncedSearch = useCallback(
-    debounce((query: string) => {
-      setArticles([]);
+  const debouncedSearch = useCallback((query: string) => {
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current);
+    }
+    
+    debounceTimerRef.current = setTimeout(() => {
       setNextCursor(null);
       setHasMore(true);
       
@@ -208,22 +209,22 @@ export default function ReadPage() {
       
       sessionStorage.removeItem(STORAGE_KEY);
       loadArticles(null, query, true);
-    }, 300),
-    [loadArticles, setSearchParams]
-  );
+    }, 300);
+  }, [loadArticles, setSearchParams]);
 
   const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const query = e.target.value;
     setSearchQuery(query);
+    setIsSearching(true);
     debouncedSearch(query);
   };
 
   const clearSearch = () => {
     setSearchQuery('');
     setSearchParams({});
-    setArticles([]);
     setNextCursor(null);
     setHasMore(true);
+    setIsSearching(true);
     sessionStorage.removeItem(STORAGE_KEY);
     loadArticles(null, '', true);
   };
@@ -244,10 +245,41 @@ export default function ReadPage() {
     }
   };
 
+  const toggleTheme = () => {
+    const newTheme = theme === 'light' ? 'dark' : 'light';
+    setTheme(newTheme);
+    localStorage.setItem(THEME_KEY, newTheme);
+  };
+
   return (
-    <div className="read-page">
+    <div className={`read-page ${theme}`}>
       <header className="read-header">
-        <h1>Article Reader</h1>
+        <div className="header-top">
+          <div className="header-brand">
+            <h1>The Harvard Crimson</h1>
+            <p className="header-tagline">The University Daily Est. 1873</p>
+            <p className="header-date">
+              {new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+              <span className="header-volume">VOLUME CLIII</span>
+            </p>
+          </div>
+          <button 
+            className="theme-toggle" 
+            onClick={toggleTheme}
+            aria-label={`Switch to ${theme === 'light' ? 'dark' : 'light'} mode`}
+          >
+            {theme === 'light' ? (
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
+              </svg>
+            ) : (
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <circle cx="12" cy="12" r="5" />
+                <path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42" />
+              </svg>
+            )}
+          </button>
+        </div>
         <div className="search-container">
           <div className="search-input-wrapper">
             <svg className="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -297,7 +329,7 @@ export default function ReadPage() {
           </div>
         )}
         
-        {articles.length === 0 && !initialLoading && !error && (
+        {articles.length === 0 && !initialLoading && !loading && !isSearching && !error && (
           <div className="empty-state">
             <svg className="empty-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
@@ -367,6 +399,15 @@ export default function ReadPage() {
             </svg>
             <p>You're all caught up!</p>
             <span className="end-subtitle">You've read all {articles.length} articles</span>
+            <button 
+              className="back-to-top-button"
+              onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M12 19V5M5 12l7-7 7 7" />
+              </svg>
+              Back to Top
+            </button>
           </div>
         )}
       </main>

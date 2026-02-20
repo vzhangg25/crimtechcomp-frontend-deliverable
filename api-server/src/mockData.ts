@@ -43,6 +43,19 @@ const TOPICS = [
   'Education',
 ];
 
+// Curated Picsum image IDs that visually match each topic
+// Each topic has multiple image IDs to provide variety
+const TOPIC_IMAGES: Record<string, number[]> = {
+  'Technology': [0, 1, 2, 60, 180, 366, 403, 407, 4, 48],  // Tech/computer images
+  'Science': [250, 256, 292, 507, 567, 614, 688, 818, 835, 904], // Abstract/scientific
+  'Business': [3, 30, 42, 158, 213, 286, 380, 453, 564, 593],  // Office/professional
+  'Health': [306, 325, 434, 452, 574, 620, 628, 659, 823, 866], // Health/wellness
+  'Culture': [36, 56, 96, 106, 193, 201, 244, 297, 399, 447],   // Art/culture
+  'Politics': [122, 154, 164, 238, 274, 339, 357, 390, 465, 538], // Architecture/civic
+  'Environment': [10, 13, 14, 15, 16, 17, 18, 28, 29, 39],      // Nature/landscape
+  'Education': [20, 24, 51, 204, 367, 397, 435, 445, 490, 525], // Books/learning
+};
+
 const SAMPLE_CONTENT = [
   `<p>In recent developments, the landscape of modern technology continues to evolve at a rapid pace. This article explores the key trends shaping our digital future and their implications for businesses and consumers alike.</p>
   <p>The integration of artificial intelligence into everyday applications has become increasingly prevalent. From recommendation systems to automated customer service, AI is transforming how we interact with digital platforms.</p>
@@ -112,6 +125,10 @@ export function generateMockArticles(): ArticleListItem[] {
     const id = `a_${String(i + 1).padStart(3, '0')}`;
     const content = generateContent(topic);
     
+    // Get a topic-appropriate image from our curated list
+    const topicImages = TOPIC_IMAGES[topic] || TOPIC_IMAGES['Technology'];
+    const imageId = topicImages[i % topicImages.length];
+    
     articles.push({
       id,
       title: generateTitle(topic, i),
@@ -119,7 +136,7 @@ export function generateMockArticles(): ArticleListItem[] {
       author,
       publishedAt: generateDate(Math.floor(i / 2)),
       readingTimeMins: Math.floor(Math.random() * 10) + 3,
-      imageUrl: `https://picsum.photos/800/400?random=${i}`,
+      imageUrl: `https://picsum.photos/id/${imageId}/800/400`,
       contentHtml: content,
     });
   }

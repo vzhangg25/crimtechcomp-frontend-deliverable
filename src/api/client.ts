@@ -24,6 +24,7 @@ export async function fetchArticles(params: ArticlesListParams = {}): Promise<Ar
   
   const url = `${API_BASE_URL}/articles?${searchParams.toString()}`;
   
+  // logs every api request to the browser console!
   console.log(`[API] Fetching articles: ${url}`);
   
   const response = await fetch(url);
